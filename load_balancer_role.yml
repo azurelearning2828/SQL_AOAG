@@ -1,0 +1,9 @@
+---
+- name: Create azure internal load balancer for SQL AOAG
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - roles/load-balancer/vars/lb_config_params.yml
+  roles:
+    - pre-checks
+    - load-balancer

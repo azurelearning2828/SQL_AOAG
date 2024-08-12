@@ -1,0 +1,102 @@
+---
+- name: Create load balancer rule
+  block:
+  - name: Check if rule name exist
+    shell: "if az network lb rule show -g {{item.rg_name}} --lb-name {{item.lb_name}} -n {{ item.rule_name }}
+            --query name >> /dev/null; then echo 'Found';else echo 'Not-Found';fi;"
+    register: rule_result
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+    changed_when: "'Exist' == get_lb_name.results[cnt].stdout and false"
+
+  - name: Print message if rule name exist
+    debug:
+      msg: "{{ 'Rule name already exist' if 'Found' == rule_result.results[cnt].stdout else 'Rule name not found so new rule will be created' }}"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+      label: "{{ item.rule_name }}" 
+
+  - name: Fetch load balancer rule info
+    shell: "az network lb rule list -g {{item.rg_name}} --lb-name {{item.lb_name}}"
+    register: rule_info
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+    changed_when: "'Found' == rule_result.results[cnt].stdout and false" # rule_result is not skipped and false
+
+  - name: Print rule info
+    debug:
+      msg: "{{ rule_info.results.stdout | to_json | from_json  }}"
+
+  - name: Fetch the config parameters for comparison
+    set_fact:
+      param_list: "{{ rule_info.results[cnt].stdout | from_json | json_query('[*].{probe_id: probe.id, 
+                    frontend_name: frontendIPConfiguration.id, backend_name: backendAddressPool.id}') }}"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+    register: rule_param_list
+
+  - name: Check if rule need creation or update
+    set_fact:
+      need_update: "{{ item.frontend_name != rule_param_list.results[cnt].ansible_facts.param_list[0].frontend_name.split('/') | last  or
+                       item.backend_name != rule_param_list.results[cnt].ansible_facts.param_list[0].backend_name.split('/') | last or
+                       item.protocol not in rule_info.results[cnt].stdout | from_json | json_query('[*].protocol') or
+                       item.frontend_port not in rule_info.results[cnt].stdout | from_json | json_query('[*].frontendPort') or
+                       item.backend_port not in rule_info.results[cnt].stdout | from_json | json_query('[*].backendPort') or
+                       item.probe_name != rule_param_list.results[cnt].ansible_facts.param_list[0].probe_id.split('/') | last  or
+                       item.load_distribution not in rule_info.results[cnt].stdout | from_json | json_query('[*].loadDistribution') or
+                       item.tcp_reset not in rule_info.results[cnt].stdout | from_json | json_query('[*].enableTcpReset') or
+                       item.idle_timeout not in rule_info.results[cnt].stdout | from_json | json_query('[*].idleTimeoutInMinutes') or
+                       item.floating_ip not in rule_info.results[cnt].stdout | from_json | json_query('[*].enableFloatingIP')}}"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+    register: is_update_require
+    when: "'Found' == rule_result.results[cnt].stdout"
+
+  - name: Print
+    debug:
+      msg: "{{ is_update_require }}"
+
+  - name: Create and configure load balancer rule
+    shell: "az network lb rule create 
+            --resource-group {{ item.rg_name }}
+            --lb-name {{ item.lb_name }}
+            --name {{ item.rule_name }}
+            --frontend-ip {{ item.frontend_name }}
+            --backend-pool-name {{ item.backend_name }}
+            --protocol {{ item.protocol }}
+            --frontend-port {{ item.frontend_port }}
+            --backend-port {{ item.backend_port }}
+            --probe {{ item.probe_name }}
+            --load-distribution {{ item.load_distribution }}
+            --idle-timeout {{ item.idle_timeout }}
+            --enable-tcp-reset {{ item.tcp_reset }}
+            --enable-floating-ip {{ item.floating_ip }}"
+    register: create_lbr_status
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Rule name: {{ get_lb_name.results[cnt].item.rule_name }}"
+      index_var: cnt
+    changed_when: >
+      'Not-Exist' in get_lb_name.results[cnt].stdout or
+      'Not-Found' in rule_result.results[cnt].stdout or
+      is_update_require.results[cnt].ansible_facts.need_update
+
+  - name: Check if load balancer rule created
+    debug:
+      msg: "{% if item.rc == 0 %} Load balancer rule created successfully \
+            {% else %} Load balancer rule creation was unsuccessful {% endif %}"
+    loop: "{{ create_lbr_status.results }}"
+    loop_control:
+      label: "Rule name: {{ create_lbr_status.results[cnt].item.rule_name }}"
+      index_var: cnt
+
+  rescue:
+  - fail: 
+     msg: "Error occured while executing Azure CLI command"
+
+

@@ -1,0 +1,48 @@
+load_balancers:
+  - lb_name: loadbalancer1
+    rg_name: lb-rg
+    backend_name: backend
+    default_fip_name: LoadBalancerFrontEnd
+    sku_value: Standard
+    subnet_name: default
+    vnet_name: lb-vnet
+    frontend_name: frontend
+    private_ip_addr: 10.0.0.18
+    availability_zone: 1 2 3
+    probe_name: lb_hp
+    probe_port: 59999
+    protocol: Tcp
+    interval_value: 5
+    rule_name: lb_rule
+    frontend_port: 1899
+    backend_port: 1899
+    load_distribution: SourceIPProtocol
+    idle_timeout: 4
+    tcp_reset: false
+    floating_ip: true
+    backendips:
+     - { ipconfig_name: ipconfig1, nic_name: vm1123 }
+     - { ipconfig_name: ipconfig1, nic_name: vm2215 }
+  - lb_name: loadbalancer2
+    rg_name: lb-rg
+    backend_name: backend
+    default_fip_name: LoadBalancerFrontEnd
+    sku_value: Standard
+    subnet_name: default
+    vnet_name: lb-vnet
+    frontend_name: frontend
+    private_ip_addr: 10.0.0.19
+    availability_zone: 1 2 3
+    probe_name: lb_hp
+    probe_port: 59999
+    protocol: Tcp
+    interval_value: 5
+    rule_name: lb_rule
+    frontend_port: 1899
+    backend_port: 1899
+    load_distribution: SourceIPProtocol
+    idle_timeout: 4
+    tcp_reset: false
+    floating_ip: true
+    backendips:
+     - { ipconfig_name: ipconfig1, nic_name: vm3641 }

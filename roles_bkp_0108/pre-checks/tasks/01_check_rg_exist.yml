@@ -1,0 +1,30 @@
+---
+- name: Check the Resource Group
+  block:
+  - name: Check if resource group exist
+    shell: "if az group show --name {{ item.rg_name }} --query name  >> /dev/null; then echo 'Exist'; else echo 'Not-Exist'; fi;"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Resource Group Name: {{ item.rg_name }}"
+    register: get_rg_name
+    changed_when: false
+
+  - name: Print message if resource group exist
+    debug:
+      msg: "The resource group {{ item.item.rg_name }} exist"
+    loop: "{{ get_rg_name.results }}" 
+    loop_control:
+      label: "{{ item.item.rg_name }}"
+    when: "'Exist' == item.stdout"  
+
+  - name: Fail if resource group not exist
+    fail:
+     msg: "The resource group {{ item.item.rg_name }} not found,so exiting the playbook"
+    when: "'Not-Exist' == item.stdout" 
+    loop: "{{ get_rg_name.results }}"
+    loop_control:
+      label: "{{ item.item.rg_name }}"
+
+  rescue:
+  - fail:
+     msg: "Error while executing check resource group  Azure CLI command"

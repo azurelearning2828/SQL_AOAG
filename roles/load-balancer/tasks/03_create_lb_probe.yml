@@ -1,0 +1,72 @@
+---
+- name: Create  health probe
+  block:
+  - name: Check if probe name exist
+    shell: "if az network lb probe show -g {{item.rg_name}} --lb-name {{item.lb_name}} -n {{ item.probe_name }}
+            --query name >> /dev/null; then echo 'Found';else echo 'Not-Found';fi;"
+    register: probe_result
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+      label: "{{ item.probe_name }}"
+    changed_when: "'Exist' == get_lb_name.results[cnt].stdout and false"
+
+  - name: Print message if probe name exist or not
+    debug:
+      msg: "{{ 'Probe name: ' + item.probe_name + ' already exist' if 'Found' == probe_result.results[cnt].stdout else 'Probe name: ' + item.probe_name + '  not found so new probe will be created'}}"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+      label: "{{ item.probe_name }}"
+
+  - name: Fetch probe config info if exist
+    shell: "az network lb probe list -g {{item.rg_name}} --lb-name {{item.lb_name}}"
+    register: probe_info
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "{{ item.probe_name }}"
+      index_var: cnt
+    changed_when: probe_result is not skipped and false
+
+  - name: Check if probe need creation or update
+    set_fact:
+      need_update: "{{ (item.probe_port not in probe_info.results[cnt].stdout | from_json | json_query('[*].port')  or
+                       item.protocol not in probe_info.results[cnt].stdout | from_json | json_query('[*].protocol') or
+                       item.interval_value not in probe_info.results[cnt].stdout | from_json | json_query('[*].intervalInSeconds')) }}"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt           
+      label: "{{ item.probe_name }} need update/creation: {{ need_update }}"
+    register: is_update_require
+
+  - name: Print message if health probe need update/creation
+    debug:
+      msg: "{{ 'Health probe  needs update or creation' if true in is_update_require | to_json | from_json | json_query('results[*].ansible_facts.need_update') else 'Health probe  does not require update or creation' }}"
+
+  - name: Create and configure health probe for load balancer
+    shell: "az network lb probe create 
+            --lb-name {{ item.lb_name }}
+            --name {{ item.probe_name }}
+            --port {{ item.probe_port }}
+            --protocol {{ item.protocol }}
+            --resource-group {{ item.rg_name }}
+            --interval {{ item.interval_value }}"
+    register: create_hp_status
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "health probe name: {{ get_lb_name.results[cnt].item.probe_name }}"
+      index_var: cnt
+    changed_when: >
+      'Not-Exist' in  get_lb_name.results[cnt].stdout or
+      'Not-Found' in probe_result.results[cnt].stdout or
+      is_update_require.results[cnt].ansible_facts.need_update
+  
+  - name: Print message if health probe created or updated
+    debug:
+      msg: "{{ 'Health probe is created/updated successfully' if  create_hp_status.changed else 'There is no configuration change in health probe' }}"
+
+  rescue:
+  - fail: 
+     msg: "Error while executing create health probe Azure CLI command"
+
+

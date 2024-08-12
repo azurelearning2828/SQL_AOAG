@@ -1,0 +1,19 @@
+---
+- name : Configure backend
+  hosts: localhost
+  tasks:
+  - name: Create backend pool
+    block:
+    - name: Configure load balancer backend pool
+      shell: "az network nic ip-config address-pool add 
+            --address-pool bep_pool
+            --ip-config-name ipconfig1
+            --nic-name vm251
+            --resource-group lb
+            --lb-name lb-demo"
+      register: bep_status
+
+    - name: Print
+      debug:
+        msg: "{{ bep_status }}"
+

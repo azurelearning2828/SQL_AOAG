@@ -1,0 +1,47 @@
+load_balancers:
+  - lb_name: loadbalancer1
+    rg_name: sqllb
+    bep_name: backend
+    default_fip_name: LoadBalancerFrontEnd
+    sku_value: Standard
+    subnet_name: default
+    vnet_name: vnet1
+    frontend_name: frontend
+    private_ip_addr: 10.0.0.18
+    availability_zone: 1 2 3
+    probe_name: lb_hp
+    probe_port: 59999
+    protocol: Tcp
+    interval_value: 5
+    rule_name: lb_rule
+    frontend_port: 1899
+    backend_port: 1899
+    load_distribution: SourceIPProtocol
+    tcp_reset: 'no'
+    floating_ip: 'yes'
+    backendips:
+     - { ip: 10.0.0.4, addr: BEP_IP1}
+     - { ip: 10.0.0.5, addr: BEP_IP2}
+  - lb_name: loadbalancer2
+    rg_name: sqlaoag
+    bep_name: backend
+    default_fip_name: LoadBalancerFrontEnd
+    sku_value: Standard
+    subnet_name: default
+    vnet_name: vnet100
+    frontend_name: frontend
+    private_ip_addr: 10.0.0.19
+    availability_zone: 1 2 3
+    probe_name: lb_hp
+    probe_port: 59999
+    protocol: Tcp
+    interval_value: 5
+    rule_name: lb_rule
+    frontend_port: 1899
+    backend_port: 1899
+    load_distribution: SourceIPProtocol
+    tcp_reset: 'no'
+    floating_ip: 'yes'
+    backendips:
+     - { ip: 10.0.0.4, addr: BEP_IP1}
+   

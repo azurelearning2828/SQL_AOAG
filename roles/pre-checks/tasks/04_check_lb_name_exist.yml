@@ -1,0 +1,24 @@
+---
+- name: Check load balancer
+  block:
+  - name: Get load balancer name
+    shell: "if az network lb show -g {{ item.rg_name}} -n {{ item.lb_name }}  --query name >> /dev/null; then echo 'Exist'; else echo 'Not-Exist'; fi;"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Load balancer name: {{ item.lb_name }}"
+    register: get_lb_name
+    changed_when: false
+  
+  - name: Check if load balancer exist
+    debug:
+      msg: "{% if item.stdout == 'Exist' %} The load balancer: {{ item.item.lb_name }} already exist under resource group: {{ item.item.rg_name }}, \
+            vnet/subnet: {{ item.item.vnet_name }}/{{item.item.subnet_name}} so it will be updated {% else %} The load balancer: {{ item.item.lb_name }} \
+            not found, so new load balancer will be created under resource group: {{ item.item.rg_name }},\ 
+            vnet/subnet: {{ item.item.vnet_name }}/{{item.item.subnet_name}} {% endif %}"
+    loop: "{{ get_lb_name.results }}"
+    loop_control:
+      label: "{{ item.item.lb_name }}"
+ 
+  rescue:
+  - fail:
+     msg: "Error while executing check load balancer exist Azure CLI command"

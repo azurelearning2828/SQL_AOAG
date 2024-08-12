@@ -1,0 +1,89 @@
+---
+- name: Create and Configure Frontend IP
+  block:
+  - name: Check if frontend name exist
+    shell: "if az network lb frontend-ip show -g {{item.rg_name}} --lb-name {{item.lb_name}} -n {{ item.frontend_name }} 
+            --query name >> /dev/null; then echo 'Found';else echo 'Not-Found';fi;"
+    register: lb_result
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+      label: "{{ item.frontend_name }}"
+    changed_when: "'Exist' == get_lb_name.results[cnt].stdout and false"
+
+  - name: Print message if frotend name exist or not
+    debug:
+      msg: "{{ 'Frontend name: ' + item.frontend_name + '  already exist' if 'Found' == lb_result.results[cnt].stdout else 'Frontend name: ' + item.frontend_name + '  not found so new one  will be created'}}"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+      label: "{{ item.frontend_name }}"
+
+  - name: Fetch frotnend config info
+    shell: "az network lb frontend-ip list -g {{item.rg_name}} --lb-name {{item.lb_name}}"
+    register: fip_info
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+      label: "{{ item.frontend_name }}"
+    changed_when: lb_result is not skipped and false
+
+  - name: Check if frontend need cretion or update
+    set_fact:
+      need_update: "{{ item.private_ip_addr not in fip_info.results[cnt].stdout | from_json | json_query('[*].privateIPAddress') }}"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+      label: "{{ item.frontend_name }} need update/creation: {{ need_update }}"
+    register: is_update_require
+
+  - name: Print message if frontend need update or creation
+    debug:
+      msg: "{{ 'Frontend needs update or creation' if true in is_update_require | to_json | from_json | json_query('results[*].ansible_facts.need_update') else 'Frontend  does not require update or creation' }}"
+    
+  - name: Create and Configure load balancer frontend IP
+    shell: "az network lb frontend-ip create --lb-name {{ item.lb_name }}
+            --resource-group {{ item.rg_name }}
+            --name {{ item.frontend_name }}
+            --private-ip-address {{ item.private_ip_addr }}
+            --zone {{ item.availability_zone }}
+            --vnet-name {{ item.vnet_name }}
+            --subnet {{ item.subnet_name }}"
+    register: create_fip_status
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Frontend Name: {{ get_lb_name.results[cnt].item.frontend_name }}"
+      index_var: cnt
+    changed_when: >
+      'Not-Exist' in  get_lb_name.results[cnt].stdout or 
+      'Not-Found' in lb_result.results[cnt].stdout or 
+      is_update_require.results[cnt].ansible_facts.need_update
+
+  - name: Print messaage if health probe created or updated
+    debug:
+      msg: "{{ 'Frontend is created or updated successfully' if  create_fip_status.changed else 'There is no configuration change in frontend' }}"
+
+  - name: Delete the deafult frontend IP
+    shell: "az network lb frontend-ip delete
+            --lb-name {{ item.lb_name }}
+            --resource-group {{ item.rg_name }}
+            --name {{ item.default_fip_name }}"
+    register: delete_default_fip_status
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Deafult frontend name: {{ create_fip_status.results[cnt].item.default_fip_name }}"
+      index_var: cnt
+    changed_when: "'Not-Exist' in get_lb_name.results[cnt].stdout"
+
+  - name: Print message if default frontend IP deleted or not
+    debug:
+      msg: "{% if item.changed %} Load balancer default frontend IP deleted successfully \
+            {% else %} Load balancer default frontend IP not found because its existing frontend {% endif %}"
+    loop: "{{ delete_default_fip_status.results }}"
+    loop_control:
+      label: "Frontend default name: {{ delete_default_fip_status.results[cnt].item.default_fip_name }} "
+      index_var: cnt
+
+  rescue:
+  - fail:
+     msg: "Error while executing create frontend IP Azure CLI command"

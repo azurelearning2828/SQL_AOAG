@@ -1,0 +1,37 @@
+---
+- name: Create load balancer rule
+  block:
+  - name: Create and configure load balancer rule
+    shell: "az network lb rule create 
+            --resource-group {{ item.rg_name }}
+            --lb-name {{ item.lb_name }}
+            --name {{ item.rule_name }}
+            --frontend-ip {{ item.frontend_name }}
+            --backend-pool-name {{ item.bep_name }}
+            --protocol {{ item.protocol }}
+            --frontend-port {{ item.frontend_port }}
+            --backend-port {{ item.backend_port }}
+            --probe {{ item.probe_name }}
+            --load-distribution {{ item.load_distribution }}
+            --enable-tcp-reset {{ item.tcp_reset }}
+            --enable-floating-ip {{ item.floating_ip }}"
+    register: create_lbr_status
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Rule name: {{ get_lb_name.results[cnt].item.rule_name }}"
+      index_var: cnt
+
+  - name: Check if load balancer rule created
+    debug:
+      msg: "{% if item.rc == 0 %} Load balancer rule created successfully \
+            {% else %} Load balancer rule creation was unsuccessful {% endif %}"
+    loop: "{{ create_lbr_status.results }}"
+    loop_control:
+      label: "Rule name: {{ create_lbr_status.results[cnt].item.rule_name }}"
+      index_var: cnt
+
+  rescue:
+  - fail: 
+     msg: "Error occured while executing Azure CLI command"
+
+

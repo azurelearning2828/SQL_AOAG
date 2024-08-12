@@ -1,0 +1,30 @@
+---
+- name: Check the Virtual Network
+  block:
+  - name: Check if vnet exist
+    shell: "if az network vnet show -g {{ item.rg_name }} -n {{ item.vnet_name }} --query name >> /dev/null; then echo 'Exist'; else echo 'Not-Exist'; fi;"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Vnet Name: {{ item.vnet_name }}"
+    register: get_vnet_name
+    changed_when: false
+
+  - name: Print message if vnet exist
+    debug:
+      msg: "The virtual network : {{ item.item.vnet_name }} found in resource group: {{ item.item.rg_name }}"
+    when: "'Exist' == item.stdout"
+    loop: "{{ get_vnet_name.results }}"
+    loop_control:
+      label: "{{ item.item.vnet_name }}"
+
+  - name: Fail if vnet not exist
+    fail:
+     msg: "The Virual Network : {{ item.item.vnet_name }} not found,so exiting the playbook"
+    when: "'Not-Exist' == item.stdout"
+    loop: "{{ get_vnet_name.results }}"
+    loop_control:
+      label: "{{ item.item.vnet_name }}"
+
+  rescue:
+  - fail:
+     msg: "Error while executing check vnet exist Azure CLI command"

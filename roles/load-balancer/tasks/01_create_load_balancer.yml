@@ -1,0 +1,49 @@
+---
+- name: Create load balancer
+  block:
+  - name: check if load balancer name exist
+    shell: "if az network lb show -g {{ item.rg_name}} -n {{ item.lb_name }}  --query name >> /dev/null; then echo 'Exist'; else echo 'Not-Exist'; fi;"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Load balancer name: {{ item.lb_name }}"
+    register: get_lb_name
+    changed_when: false
+
+  - name: Print message if load balancer exist or not
+    debug:
+      msg: "{% if item.stdout == 'Exist' %} The load balancer: {{ item.item.lb_name }} already exist under resource group: {{ item.item.rg_name }}, \
+            vnet/subnet: {{ item.item.vnet_name }}/{{item.item.subnet_name}} so it will be updated {% else %} The load balancer: {{ item.item.lb_name }} \
+            not found, so new load balancer will be created under resource group: {{ item.item.rg_name }},\ 
+            vnet/subnet: {{ item.item.vnet_name }}/{{item.item.subnet_name}} {% endif %}"
+    register: chk_lb_exist
+    loop: "{{ get_lb_name.results }}"
+    loop_control:
+      label: "{{ item.item.lb_name }}"
+
+  - name: Create azure internal load balancer
+    shell: "az network lb create --name {{ item.lb_name }} 
+            --resource-group {{ item.rg_name }} 
+            --backend-pool-name {{ item.backend_name }}  
+            --sku {{ item.sku_value }} 
+            --subnet {{ item.subnet_name }}   
+            --vnet-name {{ item.vnet_name }}"            
+    register: create_lb_status
+    loop: "{{ load_balancers }}"
+    loop_control:
+      index_var: cnt
+      label: "Load balancer name: {{ get_lb_name.results[cnt].item.lb_name }}"
+    when: "'Not-Exist' == get_lb_name.results[cnt].stdout"
+
+  - name: Print message if load balancer created or not
+    debug:
+      msg: "{% if item.changed %} Load balancer {{ item.item.lb_name }} created successfully \
+            {% else %} Load balancer {{ item.item.lb_name }} is already exist so no action was taken {% endif %}"
+    loop: "{{ create_lb_status.results }}"
+    loop_control:
+      label: "{{ item.item.lb_name }}" 
+
+  rescue:
+  - fail: 
+     msg: "Error while executing create load balancer Azure CLI command"
+
+

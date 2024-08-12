@@ -1,0 +1,29 @@
+---
+- name: Create backend pool
+  block:
+  - name: Configure load balancer backend pool
+    shell: "az network nic ip-config address-pool add 
+            --address-pool {{ item.0.bep_name }}
+            --ip-config-name {{ item.1.ipconfig_name }}
+            --nic-name {{ item.1.nic_name }}
+            --resource-group {{ item.0.rg_name }}
+            --lb-name {{ item.0.lb_name }}"
+    register: create_bep_status
+    loop: "{{ query('subelements',load_balancers,'backendips') }}"
+    loop_control:
+      label: "Backend Name: {{ item.0.bep_name }}" 
+
+  - name: Check if backendpool configured
+    debug:
+      msg: "NIC Name {{ item.item.1.nic_name }} added to backend pool successfully"
+    when: create_bep_status.results[cnt].rc == 0
+    loop: "{{ create_bep_status.results }}"
+    loop_control:
+      label: "Backend Name:{{ item.item.0.bep_name }}"
+      index_var: cnt
+  
+  rescue:
+  - fail: 
+     msg: "Error while executing configure backend pool Azure CLI command"
+
+

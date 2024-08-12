@@ -1,0 +1,12 @@
+---
+# tasks file for load-balancer
+- name: Load playbook - create Load Balancer
+  include_tasks: 01_create_load_balancer.yml
+- name: Load playbook - create frontend
+  include_tasks: 02_create_lb_frontend.yml
+    #- name: Load playbook - create health probe
+    #include_tasks: 03_create_lb_probe.yml
+    #- name: Load playbook - create rule
+    #include_tasks: 04_create_lb_rule.yml
+    #- name: Load playbook - configure backend pool
+    #include_tasks: 05_create_lb_backendpool.yml

@@ -1,0 +1,31 @@
+---
+- name: Check Subnet
+  block:
+  - name: Check if subnet exist
+    shell: "if az network vnet subnet show -g {{ item.rg_name }} -n {{ item.subnet_name }} --vnet-name {{ item.vnet_name }} \
+            --query name >> /dev/null; then echo 'Exist'; else echo 'Not-Exist'; fi;"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Subnet Name: {{ item.subnet_name }}"
+    register: get_subnet_name
+    changed_when: false
+
+  - name: Print message if subnet exist
+    debug:
+      msg: "The subnet: {{ item.item.subnet_name }} found in resource group:{{ item.item.rg_name }} and VNet:{{ item.item.vnet_name }}"
+    when: "'Exist' == item.stdout"
+    loop: "{{ get_subnet_name.results }}"
+    loop_control:
+      label: "{{ item.item.subnet_name }}"
+
+  - name: Fail if subnet not exist
+    fail:
+     msg: "The subnet: {{ item.item.subnet_name }} not found, so exiting the playbook"
+    when: "'Not-Exist' == item.stdout"
+    loop: "{{ get_subnet_name.results }}"
+    loop_control:
+      label: "{{ item.item.subnet_name }}"
+
+  rescue:
+  - fail:
+     msg: "Error while executing check subnet exist Azure CLI command"

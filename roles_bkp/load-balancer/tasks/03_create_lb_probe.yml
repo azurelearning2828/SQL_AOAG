@@ -1,0 +1,31 @@
+---
+- name: Create  health probe
+  block:
+  - name: Create and configure health probe for load balancer
+    shell: "az network lb probe create 
+            --lb-name {{ item.lb_name }}
+            --name {{ item.probe_name }}
+            --port {{ item.probe_port }}
+            --protocol {{ item.protocol }}
+            --resource-group {{ item.rg_name }}
+            --interval {{ item.interval_value }}"
+    register: create_hp_status
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "health probe name: {{ get_lb_name.results[cnt].item.probe_name }}"
+      index_var: cnt
+  
+  - name: Check if health probe created
+    debug:
+      msg: "{% if item.rc == 0 %} health probe created successfully \
+            {% else %} health probe creation was unsuccessful {% endif %}" 
+    loop: "{{ create_hp_status.results }}"
+    loop_control:
+      label: "Probe name: {{ create_hp_status.results[cnt].item.probe_name }}"
+      index_var: cnt
+
+  rescue:
+  - fail: 
+     msg: "Error while executing create health probe Azure CLI command"
+
+

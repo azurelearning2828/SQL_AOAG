@@ -1,0 +1,30 @@
+---
+- name: Create backend pool
+  block:
+  - name: Configure load balancer backend pool
+    shell: "az network lb address-pool address add 
+            --resource-group {{ item.0.rg_name }}
+            --lb-name {{ item.0.lb_name }}
+            --pool-name {{ item.0.bep_name }}
+            --name {{ item.1.addr }}
+            --vnet {{ item.0.vnet_name }}
+            --ip-address {{ item.1.ip }}"
+    register: create_bep_status
+    loop: "{{ query('subelements',load_balancers,'backendips') }}"
+    loop_control:
+      label: "Backend Name: {{ item.0.bep_name }}" 
+
+  - name: Check if backendpool configured
+    debug:
+      msg: "IP address {{ item.item.1.ip }} added to backend pool successfully"
+    when: create_bep_status.results[cnt].rc == 0
+    loop: "{{ create_bep_status.results }}"
+    loop_control:
+      label: "Backend Name:{{ item.item.0.bep_name }}"
+      index_var: cnt
+  
+  rescue:
+  - fail: 
+     msg: "Error while executing configure backend pool Azure CLI command"
+
+

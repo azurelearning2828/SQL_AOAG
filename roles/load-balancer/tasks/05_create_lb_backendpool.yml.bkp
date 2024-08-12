@@ -1,0 +1,87 @@
+---
+- name: Create backend pool
+  block:
+  - name: Check if backend name exist
+    shell: "if az network lb address-pool show -g {{item.rg_name}} --lb-name {{item.lb_name}} -n {{ item.backend_name }}
+            --query name >> /dev/null; then echo 'Found';else echo 'Not-Found';fi;"
+    register: backend_result
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Backend name: {{ item.backend_name }}"
+      index_var: cnt
+    changed_when: "'Exist' == get_lb_name.results[cnt].stdout and false"
+
+  - name: Fetch backend pool details
+    shell: "az network lb address-pool list -g {{item.rg_name}} --lb-name {{item.lb_name}}"
+    register: backend_info
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Backend name: {{ item.backend_name }}"
+      index_var: cnt
+    changed_when: false
+
+  - name: Extract existing backend config parameters
+    set_fact:
+      lb_addr_name: "{{ backend_info.results[0].stdout |from_json | json_query('[*].loadBalancerBackendAddresses[*].name')}}"
+    loop: "{{ load_balancers }}"
+    loop_control:
+      label: "Backend name: {{ item.backend_name }}"
+      index_var: cnt
+    register: backend_address_name
+
+  - name: Print backend addrees
+    debug:
+      msg: "{{ backend_address_name }}"
+
+  - name: Fetch backend config parameters from payload
+    set_fact:
+      input_addr_name: "{{ item.0.rg_name + '_' + item.1.nic_name + item.1.ipconfig_name }}"
+    loop: "{{ query('subelements',load_balancers,'backendips') }}"
+    loop_control:
+      label: "Backend Address Name: {{ item.0.rg_name + '_' + item.1.nic_name + item.1.ipconfig_name }}"
+      index_var: cnt
+    register: input_address_name
+
+  - name: Check if backend needs creation or update
+    debug:
+      msg: "{{input_address_name.results[cnt].ansible_facts.input_addr_name}} {{backend_address_name.results[0].ansible_facts.lb_addr_name[0]}}"
+        #need_update: "{{ input_address_name.results[cnt].ansible_facts.input_addr_name not in backend_address_name.results[0].ansible_facts.lb_addr_name[0] }}"
+    loop: "{{ query('subelements',load_balancers,'backendips') }}"
+    loop_control:
+      #label: "is backend need update: {{ need_update }}"
+      index_var: cnt
+    register: is_update_require
+
+  - name: Print
+    debug:
+      msg: "{{ is_update_require.results[2].ansible_facts }}"
+
+  - name: Configure load balancer backend pool
+    shell: "az network nic ip-config address-pool add 
+            --address-pool {{ item.0.backend_name }}
+            --ip-config-name {{ item.1.ipconfig_name }}
+            --nic-name {{ item.1.nic_name }}
+            --resource-group {{ item.0.rg_name }}
+            --lb-name {{ item.0.lb_name }}"
+    register: create_bep_status
+    loop: "{{ query('subelements',load_balancers,'backendips') }}"
+    loop_control:
+      label: "Backend Name: {{ item.0.backend_name }}" 
+      index_var: cnt
+        # changed_when: >
+        #is_update_require.results[cnt].ansible_facts.need_update
+
+  - name: Check if backendpool configured
+    debug:
+      msg: "NIC Name {{ item.item.1.nic_name }} added to backend pool successfully"
+    when: create_bep_status.results[cnt].rc == 0
+    loop: "{{ create_bep_status.results }}"
+    loop_control:
+      label: "Backend Name:{{ item.item.0.backend_name }}"
+      index_var: cnt
+  
+  rescue:
+  - fail: 
+     msg: "Error while executing configure backend pool Azure CLI command"
+
+
